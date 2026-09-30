@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>金融機関コード・支店コード検索</title>
+<style>
+:root{
+  --bg:#f5f6f8;--panel:#fff;--ink:#1c2230;--muted:#5d6675;--line:#dfe3ea;
+  --accent:#1f5fbf;--accent-soft:#e8f0fc;--warn-bg:#fff7e6;--warn-ink:#7a4b00;--ok:#1a7f4b;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){--bg:#14171d;--panel:#1d2129;--ink:#e6e9ef;--muted:#9aa3b2;--line:#323844;
+    --accent:#7fa8ec;--accent-soft:#24304a;--warn-bg:#3a2e12;--warn-ink:#f2cf7a;--ok:#5fcf8f;}
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI",Meiryo,system-ui,sans-serif;line-height:1.55}
+header{background:var(--panel);border-bottom:1px solid var(--line);padding:18px 16px}
+h1{font-size:1.25rem;margin:0 0 4px}
+header p{margin:0;color:var(--muted);font-size:.9rem}
+main{max-width:1040px;margin:0 auto;padding:16px}
+.tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+.tabs button{border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:9px 14px;border-radius:8px;cursor:pointer;font-size:.95rem}
+.tabs button[aria-selected="true"]{background:var(--accent);border-color:var(--accent);color:#fff}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:14px}
+.row{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+label{display:block;font-size:.85rem;color:var(--muted);margin-bottom:4px}
+input,select{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font-size:1rem}
+input:focus,select:focus{outline:2px solid var(--accent);outline-offset:1px}
+.hint{font-size:.8rem;color:var(--muted);margin-top:4px}
+.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;align-items:center}
+.btn{padding:9px 16px;border-radius:8px;border:1px solid var(--accent);background:var(--accent);color:#fff;cursor:pointer;font-size:.95rem}
+.btn.ghost{background:transparent;color:var(--accent)}
+.btn.small{padding:5px 10px;font-size:.8rem}
+.count{color:var(--muted);font-size:.9rem;margin-left:auto}
+table{width:100%;border-collapse:collapse;font-size:.92rem}
+th,td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{background:var(--accent-soft);font-weight:600;position:sticky;top:0}
+td.code{font-family:ui-monospace,Menlo,Consolas,monospace;letter-spacing:.04em;white-space:nowrap}
+.tag{display:inline-block;padding:1px 8px;border-radius:999px;background:var(--accent-soft);color:var(--accent);font-size:.75rem;margin-right:4px;white-space:nowrap}
+.tag.ok{background:transparent;border:1px solid var(--ok);color:var(--ok)}
+.wrap{overflow:auto;max-height:60vh;border:1px solid var(--line);border-radius:8px}
+.upd{font-size:.9rem;margin:2px 0 8px;color:var(--ink)}
+.notice{background:var(--warn-bg);color:var(--warn-ink);border-radius:8px;padding:10px 12px;font-size:.85rem;margin-bottom:12px}
+.empty{padding:28px;text-align:center;color:var(--muted)}
+footer{max-width:1040px;margin:0 auto;padding:8px 16px 40px;color:var(--muted);font-size:.8rem}
+footer a{color:var(--accent)}
+.branchlink{color:var(--accent);cursor:pointer;text-decoration:underline dotted}
+kbd{font-size:.8em;border:1px solid var(--line);border-radius:4px;padding:0 4px}
+.ext{margin-top:12px;border:1px dashed var(--accent);border-radius:8px;padding:12px 14px;background:var(--accent-soft)}
+.ext h3{margin:0 0 6px;font-size:.95rem}
+.ext p{margin:0 0 8px;font-size:.85rem;color:var(--muted)}
+.ext .links{display:flex;flex-wrap:wrap;gap:8px}
+.ext a{display:inline-block;padding:7px 12px;border-radius:8px;border:1px solid var(--accent);color:var(--accent);background:var(--panel);text-decoration:none;font-size:.9rem}
+.ext a.primary{background:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<header>
+  <h1>金融機関コード・支店コード検索</h1>
+  <p>金融機関コード（銀行コード）と支店コード（店舗コード）を、名称・コード・業態から検索します。</p>
+</header>
+<main>
+  <div class="upd" id="updLine"></div>
+  <div class="notice" id="dataNotice"></div>
+
+  <div class="tabs" role="tablist">
+    <button role="tab" aria-selected="true" data-tab="byName">名称から検索</button>
+    <button role="tab" aria-selected="false" data-tab="byCode">コードから検索</button>
+    <button role="tab" aria-selected="false" data-tab="byAttr">業態・所在地から検索</button>
+    <button role="tab" aria-selected="false" data-tab="data">データ更新</button>
+  </div>
+
+  <!-- 名称から検索 -->
+  <section class="panel" id="tab-byName">
+    <div class="row">
+      <div><label for="qBank">金融機関名</label><input id="qBank" placeholder="例：みずほ／三菱ＵＦＪ／横浜／さわやか" autocomplete="off">
+        <div class="hint">部分一致。全角・半角、ひらがな・カタカナ、「銀行」「信用金庫」の有無は区別しません。</div></div>
+      <div><label for="qBranch">支店名（任意）</label><input id="qBranch" placeholder="例：本店／新宿" autocomplete="off">
+        <div class="hint">入力すると該当支店のみに絞り込みます。</div></div>
+    </div>
+    <div class="actions">
+      <button class="btn" id="btnName">検索</button>
+      <button class="btn ghost" id="clrName">クリア</button>
+    </div>
+  </section>
+
+  <!-- コードから検索 -->
+  <section class="panel" id="tab-byCode" hidden>
+    <div class="row">
+      <div><label for="cBank">金融機関コード（4桁）</label><input id="cBank" placeholder="例：0001" inputmode="numeric" maxlength="4" autocomplete="off">
+        <div class="hint">半角数字。「1」と入力しても「0001」として検索します。</div></div>
+      <div><label for="cBranch">支店コード（3桁・任意）</label><input id="cBranch" placeholder="例：100" inputmode="numeric" maxlength="3" autocomplete="off">
+        <div class="hint">金融機関コードのみ→金融機関名と店舗一覧、両方→該当店舗、支店コードのみ→全金融機関から同コードの店舗を横断検索。</div></div>
+    </div>
+    <div class="actions">
+      <button class="btn" id="btnCode">検索</button>
+      <button class="btn ghost" id="clrCode">クリア</button>
+    </div>
+  </section>
+
+  <!-- 業態・所在地 -->
+  <section class="panel" id="tab-byAttr" hidden>
+    <div class="row">
+      <div><label for="aCat">業態</label><select id="aCat"><option value="">すべて</option></select></div>
+      <div><label for="aAddr">所在地（都道府県・市区町村など）</label><input id="aAddr" placeholder="例：東京都／横浜市" autocomplete="off">
+        <div class="hint" id="addrHint"></div></div>
+      <div><label for="aShowBranch">表示</label><select id="aShowBranch"><option value="inst">金融機関のみ</option><option value="all">店舗まで展開</option></select></div>
+    </div>
+    <div class="actions">
+      <button class="btn" id="btnAttr">検索</button>
+      <button class="btn ghost" id="clrAttr">クリア</button>
+    </div>
+  </section>
+
+  <!-- データ更新 -->
+  <section class="panel" id="tab-data" hidden>
+    <p style="margin-top:0">現在のデータ：<strong id="dsName"></strong>（<span id="dsAsof"></span>、金融機関 <span id="dsInst"></span> 件／店舗 <span id="dsBr"></span> 件）</p>
+    <p><strong>管理者用タブ</strong>（URL末尾に <code>#admin</code> を付けたときのみ表示）。日本銀行のコード一覧が改正されたときは、
+    <code>python3 boj2json.py code1_YYYYMMDD.xlsx --notice "通知番号" --by "更新者"</code> で <code>data.js</code> を生成し、共有フォルダの <code>data.js</code> を上書きしてください。HTML本体の変更は不要です。</p>
+    <h3 style="font-size:.95rem;margin:12px 0 6px">更新履歴</h3>
+    <div class="wrap" style="max-height:220px"><div id="history"></div></div>
+    <h3 style="font-size:.95rem;margin:14px 0 6px">動作確認用：一時読込</h3>
+    <p class="hint">下のボタンで CSV／JSON を読み込むと、このブラウザ上でだけ一時的にデータを差し替えて検索できます（共有データは変わりません。再読込で元に戻ります）。</p>
+    <div class="row">
+      <div><label for="fileIn">CSV または JSON ファイル</label><input type="file" id="fileIn" accept=".csv,.txt,.json,.js">
+        <div class="hint">CSV は1行目を見出し行とし、「金融機関コード」「支店コード（店舗コード）」「金融機関名（銀行名）」「支店名（店舗名）」「所在地（住所）」「業態」「カナ」を含む列名を自動判別します。全銀協「金融機関・店舗情報CD-ROM」のCSVもこの形式で取り込めます（見出しが無い場合は先頭行に付けてください）。</div></div>
+    </div>
+    <div class="actions">
+      <button class="btn ghost" id="btnReset">共有データ（data.js）に戻す</button>
+      <button class="btn ghost" id="btnExport">現在の検索結果をCSVで保存</button>
+    </div>
+  </section>
+
+  <div class="panel">
+    <div class="actions" style="margin:0 0 10px">
+      <strong id="resultTitle">検索結果</strong>
+      <span class="count" id="count"></span>
+    </div>
+    <div class="wrap"><table id="tbl">
+      <thead><tr><th>金融機関コード</th><th>金融機関名</th><th>業態</th><th>支店コード</th><th>支店名</th><th id="thExtra">備考</th></tr></thead>
+      <tbody id="tbody"><tr><td colspan="6" class="empty">条件を入力して「検索」を押してください。<kbd>Enter</kbd> でも検索できます。</td></tr></tbody>
+    </table></div>
+    <div id="external" class="ext" hidden></div>
+  </div>
+</main>
+<footer>
+  <div id="srcLine"></div>
+  <div style="margin-top:6px">※ 本アプリは金融機関コード・支店コードの確認を補助するものです。振込・口座登録など重要な手続きでは、必ず各金融機関の公式情報で照合してください。金融機関の統廃合・名称変更により内容が変わることがあります。</div>
+</footer>
+
+<script>
+/* data.js を読み込む。GitHub Pages 等のWeb配信ではブラウザキャッシュで古いデータが残ることがあるため、
+   日付をクエリに付けて1日1回は再取得させる（ファイルサーバーから開く場合も同じコードで動作）。 */
+(function(){
+  var d = new Date(), v = d.getFullYear()*10000 + (d.getMonth()+1)*100 + d.getDate();
+  document.write('<script src="data.js?v=' + v + '"><\/script>');
+})();
+</script>
+<script>
+(function(){
+  if(typeof BANK_DATA === 'undefined'){
+    document.getElementById('dataNotice').innerHTML = '<strong>データファイル（data.js）が読み込めません。</strong> '
+      + 'このHTMLと同じフォルダに data.js が必要です。共有フォルダから直接開くか、管理者に連絡してください。';
+    document.querySelectorAll('button,input,select').forEach(el => el.disabled = true);
+    return;
+  }
+  const ADMIN = location.hash === '#admin';
+  document.querySelector('[data-tab=data]').hidden = !ADMIN;
+  window.addEventListener('hashchange', () => location.reload());
+  const BUILTIN = JSON.parse(JSON.stringify(BANK_DATA));
+  let DS = BANK_DATA;           // 現在のデータセット
+  let lastRows = [];
+
+  /* ---------- 正規化 ---------- */
+  const SUFFIX = /(株式会社|㈱|銀行|信用金庫|信用組合|信金|信組|労働金庫|農業協同組合|農協|漁業協同組合|漁協|ＪＡ|JA|支店|出張所|本店営業部|営業部)/g;
+  function norm(s, stripSuffix){
+    if(!s) return '';
+    let t = String(s).normalize('NFKC').toLowerCase()
+      .replace(/[\s　・･\-－ー―‐()（）「」\[\]【】＜＞<>]/g,'');
+    // カタカナ→ひらがな
+    t = t.replace(/[ァ-ヶ]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0x60));
+    if(stripSuffix) t = t.replace(SUFFIX,'');
+    return t;
+  }
+  const pad = (v,n) => { v = String(v||'').normalize('NFKC').replace(/\D/g,''); return v ? v.padStart(n,'0') : ''; };
+
+  /* ---------- 表示 ---------- */
+  const $ = id => document.getElementById(id);
+  const esc = s => String(s??'').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const hasAddr = () => DS.data.some(i => i.b.some(b => b.addr));
+
+  function render(rows, title){
+    lastRows = rows;
+    $('resultTitle').textContent = title || '検索結果';
+    $('count').textContent = rows.length ? `${rows.length} 件` : '';
+    $('thExtra').textContent = hasAddr() ? '所在地／備考' : '備考';
+    const tb = $('tbody');
+    if(!rows.length){ tb.innerHTML = '<tr><td colspan="6" class="empty">該当するデータがありません。先頭の「0」の抜け、半角数字の入力、統廃合による変更をご確認ください。</td></tr>'; return; }
+    const LIMIT = 2000;
+    tb.innerHTML = rows.slice(0,LIMIT).map(r => {
+      const notes = [];
+      if(r.addr) notes.push(esc(r.addr));
+      if(r.on) notes.push('<span class="tag ok">オンライン先</span>');
+      if(r.bic) notes.push('<span class="tag">BIC設定</span>');
+      if(r.tz && r.tz !== r.bn) notes.push('<span class="tag">日銀当座取引店：'+esc(r.tz)+'</span>');
+      const bn = r.bc ? esc(r.bn || '＊') : `<span class="branchlink" data-ic="${r.ic}">店舗一覧を表示</span>`;
+      return `<tr><td class="code">${r.ic}</td><td>${esc(r.in)}</td><td><span class="tag">${esc(r.t||'—')}</span></td><td class="code">${r.bc||''}</td><td>${bn}</td><td>${notes.join(' ')}</td></tr>`;
+    }).join('') + (rows.length>LIMIT ? `<tr><td colspan="6" class="empty">上限 ${LIMIT} 件で打ち切りました。条件を絞ってください。</td></tr>` : '');
+  }
+  const instRow = i => ({ic:i.c, in:i.n, t:i.t, bc:'', bn:'', bic:i.bic, addr:i.addr||''});
+  const brRow = (i,b) => ({ic:i.c, in:i.n, t:i.t, bc:b.c, bn:b.n, on:b.on, bic:b.bic, tz:b.tz, addr:b.addr||''});
+
+  /* ---------- 外部サイト誘導（同梱データで見つからない場合） ---------- */
+  // 金融機関コード別に確認済みの公式店舗検索ページ（必要に応じて追記してください）
+  const OFFICIAL_BY_CODE = {
+    '0005': 'https://map.bk.mufg.jp/',                 // 三菱ＵＦＪ銀行 店舗・ATM検索
+    '0009': 'https://www.smbc.co.jp/kojin/tenpo/',     // 三井住友銀行 店舗案内
+  };
+  // 業態別の公式ポータル（個別金融機関のサイトへ辿れる入口）
+  const OFFICIAL_BY_TYPE = [
+    [/信用金庫|信金中央金庫/, '全国信用金庫協会（各信用金庫へのリンク）', 'https://www.shinkin.org/'],
+    [/労働金庫/, '全国労働金庫協会（各ろうきんへのリンク）', 'https://www.rokin.or.jp/'],
+    [/信用協同組合|信用組合/, '全国信用組合中央協会（各信用組合へのリンク）', 'https://www.shinyokumiai.or.jp/'],
+    [/農林中央金庫|農協|ＪＡ|JA/, 'ＪＡバンク 店舗・ＡＴＭ検索', 'https://map.jabank.org/'],
+  ];
+  function fullName(i){                       // 日銀の略称→検索用のフルネーム
+    if(!i) return '';
+    let n = i.n.replace(/信金$/,'信用金庫');
+    if(/銀行/.test(i.t) && !/銀行|信託|証券/.test(n)) n += '銀行';
+    if(/信用金庫/.test(i.t) && !/信用金庫/.test(n)) n += '信用金庫';
+    return n;
+  }
+  function pickInst(list, q){        // 複数候補なら完全一致→最短名称の順で代表を選ぶ
+    if(!list.length) return null;
+    return list.find(i => norm(i.n,true)===q) || [...list].sort((a,b)=>a.n.length-b.n.length)[0];
+  }
+  function showExternal(ctx){
+    // ctx: {mode, inst (見つかった金融機関 or null), iq (入力した名称/コード), bq (支店名), bc (支店コード), found (件数)}
+    const box = $('external');
+    const needBranch = !!(ctx.bq || ctx.bc);
+    const missing = ctx.found === 0 || (needBranch && ctx.inst && ctx.found === 0);
+    if(!ctx.iq && !ctx.bq && !ctx.bc){ box.hidden = true; return; }
+    const i = ctx.inst, name = i ? fullName(i) : String(ctx.iq||'').trim();
+    const branch = ctx.bq || (ctx.bc ? `支店コード${ctx.bc}` : '');
+    const links = [];
+    if(i && OFFICIAL_BY_CODE[i.c]) links.push(['primary', `${name} 公式店舗検索`, OFFICIAL_BY_CODE[i.c]]);
+    for(const [re,label,url] of OFFICIAL_BY_TYPE){ if(i && (re.test(i.t)||re.test(i.n)) || (!i && re.test(name))){ links.push(['primary', label, url]); break; } }
+    const q = encodeURIComponent(`${name} ${branch} 支店コード 店舗一覧`.replace(/\s+/g,' ').trim());
+    links.push([links.length?'':'primary', `「${name}${branch?' '+branch:''}」の公式サイトを検索`, `https://www.google.com/search?q=${q}`]);
+    if(i){
+      links.push(['', '参考：zengin.ajtw.net で支店一覧', ctx.bc ? `https://zengin.ajtw.net/dbs5.php?abg=${i.c}&abs=${ctx.bc}` : `https://zengin.ajtw.net/linkmeisai.php?abg=${i.c}`]);
+      links.push(['', '参考：bankdb.jp で支店一覧', `https://www.bankdb.jp/banks/${i.c}`]);
+    }
+    box.innerHTML = `<h3>${missing ? '登録データでは見つかりませんでした' : '支店コードを公式サイトで確認する'}</h3>
+      <p>${i ? `${esc(name)}（${i.c}）の支店は、日銀コード一覧には日銀当座勘定取引店しか収録されていません。` : '該当する金融機関が登録データにありません（JA・信用組合・一部の金融機関は未収録です）。'}
+      当該金融機関の公式サイトの店舗検索で確認してください（外部サイトは新しいタブで開きます）。</p>
+      <div class="links">${links.map(([cls,l,u]) => `<a class="${cls}" href="${esc(u)}" target="_blank" rel="noopener noreferrer">${esc(l)} ↗</a>`).join('')}</div>`;
+    box.hidden = false;
+  }
+
+  /* ---------- 検索ロジック ---------- */
+  function searchByName(){
+    const qb = norm($('qBank').value, true), qr = norm($('qBranch').value, true);
+    $('external').hidden = true;
+    if(!qb && !qr){ render([], '名称から検索'); return; }
+    const rows = [], matched = [];
+    for(const i of DS.data){
+      const nm = norm(i.n, true) + '|' + norm(i.kana||'', true);
+      if(qb && !nm.includes(qb)) continue;
+      matched.push(i);
+      if(!qr){ rows.push(instRow(i)); continue; }
+      for(const b of i.b){ if((norm(b.n,true)+'|'+norm(b.kana||'',true)).includes(qr)) rows.push(brRow(i,b)); }
+    }
+    render(rows, '名称から検索');
+    if(!rows.length || (qr && matched.length)) showExternal({mode:'name', inst: pickInst(matched, qb), iq:$('qBank').value, bq:$('qBranch').value.trim(), found:rows.length});
+  }
+  function searchByCode(){
+    const ic = pad($('cBank').value,4), bc = pad($('cBranch').value,3);
+    $('external').hidden = true;
+    if(!ic && !bc){ render([], 'コードから検索'); return; }
+    const rows = [];
+    for(const i of DS.data){
+      if(ic && i.c !== ic) continue;
+      if(!bc){ rows.push(instRow(i)); for(const b of i.b) rows.push(brRow(i,b)); continue; }
+      for(const b of i.b) if(b.c === bc) rows.push(brRow(i,b));
+    }
+    render(rows, 'コードから検索');
+    const inst = ic ? DS.data.find(x=>x.c===ic) : null;
+    if(ic && (!rows.length || bc)) showExternal({mode:'code', inst, iq: inst ? '' : `金融機関コード ${ic}`, bc, found:rows.length});
+  }
+  function searchByAttr(){
+    const cat = $('aCat').value, addr = norm($('aAddr').value), showAll = $('aShowBranch').value === 'all';
+    $('external').hidden = true;
+    const rows = [];
+    for(const i of DS.data){
+      if(cat && i.t !== cat) continue;
+      if(addr){
+        const hit = i.b.filter(b => norm(b.addr||'').includes(addr));
+        if(!hit.length && !norm(i.addr||'').includes(addr)) continue;
+        if(showAll || hit.length){ hit.forEach(b => rows.push(brRow(i,b))); if(!hit.length) rows.push(instRow(i)); }
+        else rows.push(instRow(i));
+        continue;
+      }
+      rows.push(instRow(i));
+      if(showAll) for(const b of i.b) rows.push(brRow(i,b));
+    }
+    render(rows, '業態・所在地から検索');
+  }
+  function listBranches(ic){
+    const i = DS.data.find(x => x.c === ic); if(!i) return;
+    render([instRow(i), ...i.b.map(b => brRow(i,b))], `${i.n} の店舗一覧`);
+    showExternal({mode:'list', inst:i, iq:i.n, found:i.b.length});
+  }
+
+  /* ---------- データ差し替え ---------- */
+  function applyDataset(ds, label){
+    DS = ds;
+    const cats = [...new Set(ds.data.map(i => i.t).filter(Boolean))].sort();
+    $('aCat').innerHTML = '<option value="">すべて</option>' + cats.map(c => `<option>${esc(c)}</option>`).join('');
+    $('dsName').textContent = label || ds.source || '読込データ';
+    $('dsAsof').textContent = ds.asof || '基準日不明';
+    $('dsInst').textContent = ds.data.length;
+    $('dsBr').textContent = ds.data.reduce((a,i)=>a+i.b.length,0);
+    $('addrHint').textContent = hasAddr() ? '部分一致で検索します。' : '日銀コード一覧には所在地情報がないため、現在のデータでは使えません。';
+    const upd = ds.asof ? `最終更新：<strong>${esc(ds.asof)}適用</strong>${ds.notice ? `（${esc(ds.notice)}）` : ''}${ds.updated ? `　更新日：${esc(ds.updated)}` : ''}${ds.by ? `　更新者：${esc(ds.by)}` : ''}` : '';
+    $('updLine').innerHTML = upd;
+    $('history').innerHTML = (ds.history||[]).length
+      ? '<table><thead><tr><th>適用日</th><th>通知番号</th><th>更新日</th><th>更新者</th><th>元ファイル</th><th>件数</th></tr></thead><tbody>'
+        + ds.history.map(h => `<tr><td>${esc(h.asof)}</td><td>${esc(h.notice||'')}</td><td>${esc(h.updated||'')}</td><td>${esc(h.by||'')}</td><td>${esc(h.file||'')}</td><td>${h.inst||''}／${h.branch||''}</td></tr>`).join('')
+        + '</tbody></table>' : '<p class="hint">履歴はありません。</p>';
+    $('dataNotice').innerHTML = `データ：<strong>${esc(ds.source||label)}</strong>（${esc(ds.asof||'')}）`
+      + (ds === BUILTIN || ds.source === BUILTIN.source
+        ? '　※日銀ネット参加先とその日銀当座勘定取引店のみを収録しており、<strong>全国すべての支店・JA・信用組合等は含みません</strong>。見つからない場合は、検索結果の下に表示される公式サイトへのリンクからご確認ください。'
+        : '　※このブラウザ上で一時的に読み込んだデータです。ページを再読込すると共有データに戻ります。');
+    $('srcLine').innerHTML = `出典：${esc(ds.source||'')}${ds.url ? ` <a href="${esc(ds.url)}" target="_blank" rel="noopener">${esc(ds.url)}</a>` : ''}${ds.file ? `（${esc(ds.file)}）` : ''}`;
+    render([], '検索結果'); $('external').hidden = true;
+  }
+
+  function parseCSV(text){
+    const rows=[]; let row=[], f='', q=false;
+    for(let k=0;k<text.length;k++){
+      const c=text[k];
+      if(q){ if(c==='"'){ if(text[k+1]==='"'){f+='"';k++;} else q=false; } else f+=c; }
+      else if(c==='"') q=true;
+      else if(c===','){ row.push(f); f=''; }
+      else if(c==='\n'||c==='\r'){ if(c==='\r'&&text[k+1]==='\n')k++; row.push(f); rows.push(row); row=[]; f=''; }
+      else f+=c;
+    }
+    if(f||row.length){ row.push(f); rows.push(row); }
+    return rows.filter(r => r.some(x => x!==''));
+  }
+  function csvToDataset(text, fname){
+    const rows = parseCSV(text); if(rows.length<2) throw new Error('データ行がありません');
+    const H = rows[0].map(h => h.normalize('NFKC'));
+    const find = (...keys) => H.findIndex(h => keys.some(k => h.includes(k)));
+    const iIc = find('金融機関コード','銀行コード'), iBc = find('支店コード','店舗コード','店番');
+    const iIk = H.findIndex(h => /(金融機関|銀行).*(カナ|かな)/.test(h)), iBk = H.findIndex(h => /(支店|店舗).*(カナ|かな)/.test(h));
+    const iIn = H.findIndex((h,k) => /(金融機関|銀行)名/.test(h) && k!==iIk), iBn = H.findIndex((h,k) => /(支店|店舗)名/.test(h) && k!==iBk);
+    const iAd = find('所在地','住所'), iCat = find('業態','種別'), iZip = find('郵便');
+    if(iIc<0 || iIn<0) throw new Error('「金融機関コード」「金融機関名」の列が見つかりません（1行目に見出しが必要です）');
+    const map = new Map();
+    for(const r of rows.slice(1)){
+      const ic = pad(r[iIc],4); if(!ic) continue;
+      let inst = map.get(ic);
+      if(!inst){ inst = {c:ic, n:(r[iIn]||'').trim(), kana:iIk>=0?r[iIk]:'', t:iCat>=0?(r[iCat]||'').trim():'', b:[]}; map.set(ic,inst); }
+      if(iBc>=0 && pad(r[iBc],3)){
+        const addr = (iZip>=0 && r[iZip] ? '〒'+r[iZip]+' ' : '') + (iAd>=0 ? (r[iAd]||'') : '');
+        inst.b.push({c:pad(r[iBc],3), n:(iBn>=0?r[iBn]:'').trim(), kana:iBk>=0?r[iBk]:'', addr:addr.trim()});
+        if(!inst.n) inst.n = (r[iIn]||'').trim();
+      }
+    }
+    return {source:'読込CSV：'+fname, asof:new Date().toLocaleDateString('ja-JP')+' 読込', data:[...map.values()].sort((a,b)=>a.c.localeCompare(b.c))};
+  }
+  $('fileIn').addEventListener('change', async e => {
+    const f = e.target.files[0]; if(!f) return;
+    try{
+      const buf = await f.arrayBuffer();
+      let text;
+      try{ text = new TextDecoder('utf-8',{fatal:true}).decode(buf); }catch{ text = new TextDecoder('shift_jis').decode(buf); }
+      if(/\.(json|js)$/i.test(f.name)){
+        const j = JSON.parse(text.replace(/^\s*const\s+BANK_DATA\s*=\s*/,'').replace(/;\s*$/,''));
+        applyDataset(j, j.source || f.name);
+      } else applyDataset(csvToDataset(text, f.name), '読込CSV：'+f.name);
+      alert('データを読み込みました。');
+    }catch(err){ alert('読み込みに失敗しました：'+err.message); }
+    e.target.value='';
+  });
+  $('btnReset').onclick = () => applyDataset(JSON.parse(JSON.stringify(BUILTIN)));
+  $('btnExport').onclick = () => {
+    if(!lastRows.length){ alert('検索結果がありません'); return; }
+    const head = ['金融機関コード','金融機関名','業態','支店コード','支店名','所在地'];
+    const csv = [head, ...lastRows.map(r => [r.ic,r.in,r.t,r.bc,r.bn,r.addr||''])].map(r => r.map(v => `"${String(v??'').replace(/"/g,'""')}"`).join(',')).join('\r\n');
+    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['﻿'+csv],{type:'text/csv'})); a.download = 'bankcode_result.csv'; a.click();
+  };
+
+  /* ---------- UI 配線 ---------- */
+  document.querySelectorAll('.tabs [role=tab]').forEach(btn => btn.onclick = () => {
+    document.querySelectorAll('.tabs [role=tab]').forEach(b => b.setAttribute('aria-selected', b===btn));
+    ['byName','byCode','byAttr','data'].forEach(t => $('tab-'+t).hidden = (t !== btn.dataset.tab));
+  });
+  $('btnName').onclick = searchByName;  $('btnCode').onclick = searchByCode;  $('btnAttr').onclick = searchByAttr;
+  $('clrName').onclick = () => { $('qBank').value=''; $('qBranch').value=''; render([],'名称から検索'); };
+  $('clrCode').onclick = () => { $('cBank').value=''; $('cBranch').value=''; render([],'コードから検索'); };
+  $('clrAttr').onclick = () => { $('aCat').value=''; $('aAddr').value=''; render([],'業態・所在地から検索'); };
+  [['qBank',searchByName],['qBranch',searchByName],['cBank',searchByCode],['cBranch',searchByCode],['aAddr',searchByAttr]]
+    .forEach(([id,fn]) => $(id).addEventListener('keydown', e => { if(e.key==='Enter') fn(); }));
+  $('tbody').addEventListener('click', e => { const t = e.target.closest('.branchlink'); if(t) listBranches(t.dataset.ic); });
+
+  applyDataset(DS);
+})();
+</script>
+</body>
+</html>
